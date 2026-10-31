@@ -1,0 +1,10 @@
+stage/kind,count,total_ms,mean_ms,max_ms,failed
+cache_miss/signature,1,0.001,0.001,0.001,0
+gate_wait/official_html,2,0.016,0.008,0.009,0
+html_parse/course_entry,1,0.167,0.167,0.167,0
+html_parse/homework_status,1,0.507,0.507,0.507,0
+html_parse/signature,1,0.055,0.055,0.055,0
+network_body/official_html,2,128.437,64.219,64.892,0
+throttle_wait/official_html,2,946.923,473.462,946.920,0
+Network vs HTML parse accumulated time: 99.44% / 0.56%
+Stage totals are accumulated work, not wall time. Queue and throttle waits are reported separately.

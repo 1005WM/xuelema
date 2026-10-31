@@ -1,0 +1,4 @@
+<resources>
+    <item name="homework_page_reader" type="id" />
+    <item name="question_page_reader" type="id" />
+</resources>

@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/zhu-hailin/chaoxing-ai-assistant",
+  "revision": "5ca9a6e8252be2a73c57bdd14b3d23fe271e1930",
+  "license": "MIT",
+  "files": [
+    {
+      "sha256": "debd02b583c1e3f34a9667ccf2cb94e714b225e90316ce3f21ed77ec5693780a",
+      "path": "question-context.js"
+    },
+    {
+      "sha256": "4c365f89a745d812182ca02497678ef208dccd08d116fb7525f1a8b67adfeb2a",
+      "path": "question-parser.js"
+    },
+    {
+      "sha256": "39ece9e1825ad46caab106f9e95be8177c745fd777683c01a4433c7d6dc6b44c",
+      "path": "question-actions.js"
+    },
+    {
+      "sha256": "5c2c152d3da3ba27189ac6501b1599167f3ec0971afa28595555f38cb61e8885",
+      "path": "LICENSE"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+Local simulated HTML / intercepted OkHttp only. No real school-network measurements.
+
+CACHE_BENCH simulated_rtt_ms=30 courses=2 old_warm_requests=3 old_warm_ms=108 cold_requests=6 cold_ms=232 new_warm_requests=0 new_warm_ms=0
+
+READ_TIMING stage=gate_wait kind=official_html elapsed_ms=0.011 success=true
+READ_TIMING stage=throttle_wait kind=official_html elapsed_ms=0.005 success=true
+READ_TIMING stage=network_body kind=official_html elapsed_ms=69.744 success=true
+READ_TIMING stage=html_parse kind=course_entry elapsed_ms=0.172 success=true
+READ_TIMING stage=html_parse kind=signature elapsed_ms=0.115 success=true
+READ_TIMING stage=gate_wait kind=official_html elapsed_ms=0.009 success=true
+READ_TIMING stage=throttle_wait kind=official_html elapsed_ms=945.698 success=true
+READ_TIMING stage=network_body kind=official_html elapsed_ms=63.395 success=true
+READ_TIMING stage=html_parse kind=homework elapsed_ms=0.635 success=true
+10-30 12:11:24.774  3820  3834 I System.out: RESTART_PROOF seeded_pid=3820 network_requests=4
+10-30 12:11:26.195  3864  3877 I System.out: RESTART_PROOF restored_pid=3864 previous_pid=3820 network_requests=0

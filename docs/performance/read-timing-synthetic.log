@@ -1,0 +1,10 @@
+READ_TIMING stage=cache_miss kind=signature elapsed_ms=0.001 success=true
+READ_TIMING stage=gate_wait kind=official_html elapsed_ms=0.009 success=true
+READ_TIMING stage=throttle_wait kind=official_html elapsed_ms=0.003 success=true
+READ_TIMING stage=network_body kind=official_html elapsed_ms=64.892 success=true
+READ_TIMING stage=html_parse kind=course_entry elapsed_ms=0.167 success=true
+READ_TIMING stage=html_parse kind=signature elapsed_ms=0.055 success=true
+READ_TIMING stage=gate_wait kind=official_html elapsed_ms=0.007 success=true
+READ_TIMING stage=throttle_wait kind=official_html elapsed_ms=946.920 success=true
+READ_TIMING stage=network_body kind=official_html elapsed_ms=63.545 success=true
+READ_TIMING stage=html_parse kind=homework_status elapsed_ms=0.507 success=true

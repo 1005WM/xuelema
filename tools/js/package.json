@@ -1,0 +1,1 @@
+{"private":true,"scripts":{"test":"node verify.cjs && node verify_pending.cjs && node verify_stu_work.cjs && node verify_frames.cjs && node verify_ai_questions.cjs && node verify_text_fill.cjs && node verify_fill_compat.cjs && node verify_fill_speed.cjs"},"devDependencies":{"jsdom":"26.1.0"}}

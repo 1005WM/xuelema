@@ -1,0 +1,11 @@
+-keepattributes Signature,RuntimeVisibleAnnotations,AnnotationDefault
+-keep class com.homeworkassistant.data.web.**Dto { *; }
+-keep class com.homeworkassistant.domain.model.Question { *; }
+-keep class com.homeworkassistant.domain.model.Answer { *; }
+-keep class com.homeworkassistant.domain.model.QuestionType { *; }
+-keep class com.homeworkassistant.domain.model.QuestionPage { *; }
+-keep class com.homeworkassistant.domain.model.QuestionFrame { *; }
+-keep class com.homeworkassistant.domain.model.QuestionImage { *; }
+-keep class com.homeworkassistant.data.web.QuestionEnvelope { *; }
+-keep class com.homeworkassistant.data.web.QuestionFillResult { *; }
+-keep class com.homeworkassistant.data.ai.**Dto { *; }
