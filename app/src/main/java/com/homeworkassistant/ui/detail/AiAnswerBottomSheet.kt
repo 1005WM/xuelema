@@ -8,9 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -22,6 +19,11 @@ import com.homeworkassistant.ui.components.StudyPanel
 import com.homeworkassistant.domain.model.QuestionType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -39,19 +41,23 @@ fun AiAnswerBottomSheet(state: AnswerUiState, onDismiss: () -> Unit, onEdit: (St
     listState: LazyListState = rememberLazyListState()) {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
-    val focusManager = LocalFocusManager.current
-    val dragging by listState.interactionSource.collectIsDraggedAsState()
     val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
-    LaunchedEffect(dragging) {
-        // Release an earlier text field's bring-into-view requests when the user scrolls the list.
-        if (dragging) focusManager.clearFocus()
-    }
     val filledCount = state.answers.count { state.fillFeedback[it.questionId] in setOf("已回填", "已有相同答案") }
     val firstPending = state.answers.indexOfFirst { state.fillFeedback[it.questionId] !in setOf("已回填", "已有相同答案") }
     fun copy(text: String) { scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("作业答案", text))) } }
     ModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         sheetGesturesEnabled = false, dragHandle = null) {
+        // The modal owns a different focus manager from the underlying Activity.
+        val focusManager = LocalFocusManager.current
+        val scrollFocus = remember(focusManager) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (source == NestedScrollSource.UserInput && available.y != 0f) focusManager.clearFocus(force = true)
+                    return Offset.Zero
+                }
+            }
+        }
         Column(Modifier.fillMaxWidth().height(windowHeight * .92f).padding(horizontal = 20.dp).imePadding()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -79,7 +85,7 @@ fun AiAnswerBottomSheet(state: AnswerUiState, onDismiss: () -> Unit, onEdit: (St
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("ai-answer-list"), state = listState, overscrollEffect = null, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("ai-answer-list").nestedScroll(scrollFocus), state = listState, overscrollEffect = null, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
                 item(key = "guidance") {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("提交前请核对 AI 答案。生成时，题目及已启用的图片将发送给设置中的 AI 服务。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
