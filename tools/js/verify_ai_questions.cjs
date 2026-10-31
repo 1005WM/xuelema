@@ -42,8 +42,9 @@ const single = `<div class="question" data-question-id="q1"><div class="stem">�
   const composite=run(`<div class="TiMu" data-question-id="c"><div class="Zy_TItle">【填空题】分别填写</div><label for="first">第一空</label><input type="text" id="first"><label for="second">第二空</label><input type="text" id="second"></div>`);
   assert.equal(composite.page.questions.length,2);const values=Object.fromEntries(composite.page.questions.map((q,i)=>[q.id,`答案${i+1}`]));
   assert.equal((await fill(composite,values)).filled.length,2);checks++;
-  const ambiguous=run(`<div class="TiMu" data-question-id="c"><div class="Zy_TItle">【填空题】两空</div><input type="text"><input type="text"></div>`);
-  assert.equal(ambiguous.page.questions[0].canFill,false);assert.equal((await fill(ambiguous,{c:'["一","二"]'})).filled.length,0);checks++;
+  const ordered=run(`<div class="TiMu" data-question-id="c"><div class="Zy_TItle">【填空题】两空</div><input type="text"><input type="text"></div>`);
+  assert.equal(ordered.page.questions.length,2);assert.ok(ordered.page.questions.every(q=>q.canFill));
+  assert.equal((await fill(ordered,Object.fromEntries(ordered.page.questions.map((q,index)=>[q.id,['一','二'][index]])))).filled.length,2);checks++;
   const math=run(`<div class="TiMu" data-question-id="s"><div class="Zy_TItle">【计算题】求导 <span data-latex="x^2"></span></div><textarea></textarea></div>`);
   assert.equal(math.page.questions[0].type,'SHORT');assert.ok(math.page.questions[0].stem.includes('x^2'));assert.equal(math.page.questions[0].hasUnsupportedMedia,false);checks++;
   const images=run(`<div class="TiMu" data-question-id="p"><div class="Zy_TItle">【单选题】选图<img src="https://p.ananas.chaoxing.com/stem.png"></div><label><input type="radio" name="p" value="A"><img src="https://p.ananas.chaoxing.com/a.png"></label><label><input type="radio" name="p" value="B">文字B</label></div>`);

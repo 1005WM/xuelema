@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  if (window.__haQuestionEngine?.version === '1.3') return;
+  if (window.__haQuestionEngine?.version === '1.4') return;
   const allowed = value => { try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password && (!u.port || u.port === '443') && (u.hostname === 'chaoxing.com' || u.hostname.endsWith('.chaoxing.com')); } catch { return false; } };
   if (!allowed(location.href)) return;
   const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -174,5 +174,5 @@
   }
   window.addEventListener('message', event => { if (event.source === window.parent && allowed(event.origin) && event.data?.op === 'read') dispatch(event.data); });
   if (window.QuestionDomBridge) window.QuestionDomBridge.onmessage = event => { try { command(JSON.parse(event.data)); } catch {} };
-  window.__haQuestionEngine = {version:'1.3',extract,fill,dispatch,cancel:() => { stopped = true; }};
+  window.__haQuestionEngine = {version:'1.4',extract,fill,dispatch,cancel:() => { stopped = true; }};
 })();
