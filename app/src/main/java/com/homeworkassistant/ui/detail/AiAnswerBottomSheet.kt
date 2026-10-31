@@ -122,7 +122,7 @@ fun AiAnswerBottomSheet(state: AnswerUiState, onDismiss: () -> Unit, onEdit: (St
                             OutlinedTextField(answer.answer, { onEdit(answer.questionId, it) }, Modifier.fillMaxWidth(), enabled = !state.busy, label = { Text("可编辑答案") })
                             if (answer.explanation.isNotBlank()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("解题思路", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                    Text(if (q?.type == QuestionType.FILL) "解题步骤" else "解题思路", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                                     Text(answer.explanation, style = MaterialTheme.typography.bodyMedium)
                                 }
                             }

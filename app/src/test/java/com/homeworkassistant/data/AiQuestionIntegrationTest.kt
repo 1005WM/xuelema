@@ -57,6 +57,49 @@ class AiQuestionIntegrationTest {
         })
         assertEquals("202", repo.generate(listOf(question), settings).toList().filterIsInstance<AiEvent.Batch>().single().answers.single().answer)
     }
+
+    @Test fun fillQuestionsRequestCompleteStepsWithoutWritingStepsIntoTheAnswer() = runBlocking {
+        val blanks = (1..2).map { index -> Question("frame::q::unit:$index", index, QuestionType.FILL,
+            "已知 x + 1 = 3，求 x 和 x 的平方。第 ${index} 空", emptyList(), sourceNumber = 1, sourcePart = "第 ${index} 空") }
+        var requests = 0
+        val explanations = mutableListOf<String>()
+        val repo = AiRepositoryImpl(keys, client { request ->
+            requests++
+            val messages = payload(request)["messages"].asJsonArray
+            val system = messages[0].asJsonObject["content"].asString
+            assertTrue(system.contains("完整、可核对的分步解答"))
+            assertTrue(system.contains("answer 只填写该作答区域的最终答案"))
+            val sent = JsonParser.parseString(messages[1].asJsonObject["content"].asString).asJsonArray
+            assertEquals(1, sent.size())
+            val id = sent.single().asJsonObject["id"].asString
+            val answer = if (id.endsWith(":1")) "2" else "4"
+            val explanation = "1. 根据 x + 1 = 3，两边减去 1。\n2. 得到 x = 2，故 x 的平方为 4。\n3. 代回核对条件并填写当前空。"
+            explanations += explanation
+            200 to sse(gson.toJson(mapOf("answers" to listOf(mapOf("questionId" to id, "answer" to answer, "explanation" to explanation)))))
+        })
+        val answers = repo.generate(blanks, settings).toList().filterIsInstance<AiEvent.Batch>().flatMap { it.answers }
+        assertEquals(2, requests)
+        assertEquals(blanks.map { it.id }, answers.map { it.questionId })
+        assertEquals(listOf("2", "4"), answers.map { it.answer })
+        assertEquals(explanations, answers.map { it.explanation })
+    }
+
+    @Test fun fillAnswersWithoutStepsCannotBeTreatedAsComplete() {
+        val fill = question.copy(type = QuestionType.FILL, options = emptyList(), optionKeys = emptyList())
+        for (response in listOf(
+            """{"answers":[{"id":"frame::q","answer":"2"}]}""",
+            """{"answers":[{"id":"frame::q","answer":["2"],"explanation":"  "}]}"""
+        )) {
+            val error = assertThrows(IOException::class.java) { AiAnswerCodec.decode(response, listOf(fill)) }
+            assertTrue(error.message!!.contains("缺少解题步骤"))
+        }
+        val explanation = "1. 列式。\n2. 计算并核对。"
+        val decoded = AiAnswerCodec.decode(gson.toJson(mapOf("answers" to listOf(
+            mapOf("id" to fill.id, "answer" to listOf("2"), "reason" to explanation)))), listOf(fill)).single()
+        assertEquals("2", decoded.answer)
+        assertEquals(explanation, decoded.explanation)
+    }
+
     @Test fun imageQuestionsRequireExplicitOptInAndNeverDegradeToTextOnly() = runBlocking {
         var requests = 0
         val repo = AiRepositoryImpl(keys, client { requests++; error("Must not send a partial question") })
