@@ -21,8 +21,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.channels.Channel
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
@@ -104,17 +102,11 @@ class AppViewModel @Inject constructor(
     private val _pageImport = MutableStateFlow(PageImportUiState())
     val pageImport = _pageImport.asStateFlow()
     private var importJob: Job? = null
-    private var autoRefreshedAccount: String? = null
-    private var lastAutoRefreshNanos = 0L
+    private val autoRefreshedAccounts = mutableSetOf<String>()
     private var refreshJob: Job? = null
     private var detailsJob: Job? = null
     private var examsJob: Job? = null
     private var aiJob: Job? = null
-    private var statusWatchJob: Job? = null
-    private var statusReturnJob: Job? = null
-    private var watchedHomework: String? = null
-    private var pendingHomeworkStatus: Pair<String, String>? = null
-    private val statusSignals = Channel<Unit>(Channel.CONFLATED)
     private var verifying = false
     private var loginJob: Job? = null
     fun filter(value: HomeFilter) { filter.value = value }
@@ -135,9 +127,8 @@ class AppViewModel @Inject constructor(
     }
     fun autoRefreshOnce() {
         val id = home.value.accountId ?: return
-        if (autoRefreshedAccount == id && System.nanoTime() - lastAutoRefreshNanos < 1_500_000_000L) return
-        autoRefreshedAccount = id
-        lastAutoRefreshNanos = System.nanoTime()
+        // One attempt per account in this ViewModel session, including failed/cancelled reads.
+        if (!autoRefreshedAccounts.add(id)) return
         refresh()
     }
     fun stopForegroundSync(invalidate: Boolean = true) {
@@ -148,103 +139,10 @@ class AppViewModel @Inject constructor(
         refreshing.update { it.copy(examsBusy = false) }
         if (invalidate) sync.invalidate()
     }
-    fun homeworkIdForUrl(url: String): String? {
-        if (!TrustedOriginPolicy().allows(url)) return null
-        val parsed = url.toHttpUrlOrNull() ?: return null
-        fun parameter(vararg names: String) = parsed.queryParameterNames.firstOrNull { key -> names.any { it.equals(key, true) } }
-            ?.let(parsed::queryParameter)
-        val workId = parameter("workId", "taskrefId") ?: return null
-        val courseId = parameter("courseId")
-        val classId = parameter("classId", "clazzId")
-        return home.value.snapshot?.items?.filter { item ->
-            item.id.substringAfterLast(':') == workId &&
-                (courseId == null || item.course.id.substringBefore(':') == courseId) &&
-                (classId == null || item.course.id.substringAfter(':') == classId)
-        }?.singleOrNull()?.id
-    }
-
-    fun captureHomeworkDeadline(web: WebView) {
+    fun selectCourse(courseId: String) {
         val account = home.value.accountId ?: return
-        val id = homeworkIdForUrl(web.url.orEmpty()) ?: return
-        val item = home.value.snapshot?.items?.firstOrNull { it.id == id } ?: return
-        val initialUrl = web.url
-        viewModelScope.launch {
-            try {
-                // Page-finished can precede AJAX metadata. No extra network request is made here.
-                for (wait in listOf(0L, 600L, 1_500L)) {
-                    delay(wait)
-                    if (home.value.accountId != account || web.url != initialUrl) return@launch
-                    val update = RenderedHomeworkMetadataReader().read(web, item) ?: continue
-                    if (home.value.accountId == account && web.url == initialUrl) homework.updateDetails(account, listOf(update))
-                    return@launch
-                }
-            } catch (e: CancellationException) { throw e }
-              catch (_: Exception) { /* Optional metadata never blocks the official task or status checks. */ }
-        }
+        sync.preferCourse(account, courseId)
     }
-    fun watchHomeworkStatus(homeworkId: String?) {
-        if (homeworkId == null) return
-        if (watchedHomework == homeworkId && statusWatchJob?.isActive == true) return
-        stopHomeworkStatusWatch()
-        statusReturnJob?.cancel()
-        val account = home.value.accountId ?: return
-        watchedHomework = homeworkId
-        sync.preferCourse(account, homeworkId.substringBeforeLast(':'))
-        pendingHomeworkStatus = account to homeworkId
-        statusWatchJob = viewModelScope.launch {
-            while (isActive && home.value.accountId == account) {
-                if (!checkHomeworkStatus(account, homeworkId) && (refreshing.value.needsLogin || refreshing.value.error?.contains("暂停") == true)) break
-                withTimeoutOrNull(5_000) { statusSignals.receive() }
-            }
-        }
-    }
-    fun requestHomeworkStatusCheck() { statusSignals.trySend(Unit) }
-    fun stopHomeworkStatusWatch() { statusWatchJob?.cancel(); watchedHomework = null }
-    fun stopHomeworkStatusChecks() { stopHomeworkStatusWatch(); statusReturnJob?.cancel() }
-    fun resumeHomeworkStatusCheck() {
-        if (statusReturnJob?.isActive == true) return
-        val pending = pendingHomeworkStatus ?: return
-        if (pending.first == home.value.accountId) reconcileHomeworkOnReturn(pending.second)
-    }
-    fun reconcileHomeworkOnReturn(homeworkId: String?) {
-        if (homeworkId == null) return
-        val account = home.value.accountId ?: return
-        val pending = account to homeworkId
-        pendingHomeworkStatus = pending
-        val previousWatch = statusWatchJob
-        stopHomeworkStatusWatch()
-        statusReturnJob?.cancel()
-        statusReturnJob = viewModelScope.launch {
-            previousWatch?.join()
-            var succeeded = false
-            repeat(3) { attempt ->
-                if (home.value.accountId != account) return@launch
-                succeeded = checkHomeworkStatus(account, homeworkId)
-                if (refreshing.value.needsLogin) return@launch
-                if (succeeded && homework.observe(account).first()?.items
-                        ?.firstOrNull { it.id == homeworkId }?.status?.isCompleted == true) {
-                    if (pendingHomeworkStatus == pending) pendingHomeworkStatus = null
-                    return@launch
-                }
-                if (attempt < 2) delay(1_500L * (attempt + 1))
-            }
-            if (!succeeded) _notice.value = "暂未核对到最新作业状态，请检查网络或官方登录状态；现有数据已保留"
-            else if (pendingHomeworkStatus == pending) pendingHomeworkStatus = null
-        }
-    }
-    private suspend fun checkHomeworkStatus(account: String, homeworkId: String): Boolean = try {
-        sync.checkHomeworkStatus(account, homeworkId)
-        true
-    } catch (e: CancellationException) {
-        currentCoroutineContext().ensureActive()
-        false
-    }
-      catch (e: SessionExpiredException) {
-        refreshing.update { it.copy(needsLogin = true, error = e.message) }
-        false
-    } catch (e: com.homeworkassistant.data.session.OfficialReadPausedException) {
-        refreshing.update { it.copy(error = e.message) }; false
-    } catch (_: Exception) { false }
     fun cancelSync() {
         stopForegroundSync()
         refreshing.update { it.copy(busy = false, detailsBusy = false, progress = "") }
@@ -358,7 +256,6 @@ class AppViewModel @Inject constructor(
                 refreshJob?.cancelAndJoin(); importJob?.cancelAndJoin(); detailsJob?.cancelAndJoin(); examsJob?.cancelAndJoin()
                 settingsRepository.setAccount(id)
                 sync.resumeAfterVerification()
-                autoRefreshedAccount = null
                 refreshing.value = RefreshState()
                 _login.value = LoginUiState(message = "登录成功，正在进入首页…")
                 _loginCompleted.emit(Unit)
@@ -369,8 +266,6 @@ class AppViewModel @Inject constructor(
         }
     }
     fun logout() { viewModelScope.launch {
-        stopHomeworkStatusChecks()
-        pendingHomeworkStatus = null
         try {
             sync.invalidate(); sync.clearReadCache()
             refreshJob?.cancelAndJoin(); aiJob?.cancelAndJoin()
@@ -386,14 +281,12 @@ class AppViewModel @Inject constructor(
             _syncNotice.value = null
             _login.value = LoginUiState()
             aiConfigChanged()
-            _pageImport.value = PageImportUiState(); autoRefreshedAccount = null
+            _pageImport.value = PageImportUiState(); autoRefreshedAccounts.clear()
             if (!fullClear) _notice.value = "已退出登录。当前 WebView 不支持完整站点存储清理，建议更新 Android System WebView"
         } catch (e: CancellationException) { throw e }
           catch (e: Exception) { _notice.value = e.message ?: "退出清理失败，请重试" }
     } }
     fun clearCache() { viewModelScope.launch {
-        stopHomeworkStatusChecks()
-        pendingHomeworkStatus = null
         sync.invalidate(); sync.clearReadCache(); refreshJob?.cancelAndJoin(); importJob?.cancelAndJoin(); detailsJob?.cancelAndJoin(); examsJob?.cancelAndJoin(); homework.clear(); examRepository.clear()
         refreshing.value = RefreshState(); _syncNotice.value = null; _notice.value = "作业与考试缓存已清理"
     } }

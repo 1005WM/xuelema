@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.compose.LifecycleStartEffect
 import com.homeworkassistant.ui.AppViewModel
 import com.homeworkassistant.ui.about.AboutScreen
 import com.homeworkassistant.ui.detail.HomeworkDetailScreen
@@ -25,6 +24,7 @@ import com.homeworkassistant.ui.guide.GuideScreen
 import com.homeworkassistant.ui.login.LoginScreen
 import com.homeworkassistant.ui.settings.SettingsScreen
 import com.homeworkassistant.ui.components.SyncResultPopup
+import com.homeworkassistant.ui.components.StartupHomeworkRefresh
 import com.homeworkassistant.ui.theme.HomeworkTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -49,27 +49,20 @@ class MainActivity : ComponentActivity() {
             var route by rememberSaveable { mutableStateOf("home") }
             var detailUrl by rememberSaveable { mutableStateOf("https://i.chaoxing.com") }
             var detailTitle by rememberSaveable { mutableStateOf("官方页面") }
-            var detailHomeworkId by rememberSaveable { mutableStateOf<String?>(null) }
             var detailReturnRoute by rememberSaveable { mutableStateOf("home") }
             var allowAi by rememberSaveable { mutableStateOf(true) }
             val snackbar = remember { SnackbarHostState() }
             fun closeDetail() {
-                if (detailReturnRoute == "home") model.reconcileHomeworkOnReturn(detailHomeworkId)
                 model.resetAnswers(); model.cancelPageImport(); route = detailReturnRoute
-            }
-            LifecycleStartEffect(route, detailHomeworkId, home.accountId to guide.completed) {
-                if (guide.completed && route == "detail" && allowAi) model.watchHomeworkStatus(detailHomeworkId)
-                else if (guide.completed && route == "home") model.resumeHomeworkStatusCheck()
-                onStopOrDispose { model.stopHomeworkStatusWatch() }
             }
             LaunchedEffect(notice) { notice?.let { snackbar.showSnackbar(it); model.clearNotice() } }
             LaunchedEffect(home.accountId, home.needsLogin) {
                 if (home.accountId != null && !home.needsLogin && route == "login") route = "home"
             }
             LaunchedEffect(Unit) { model.loginCompleted.collect { route = "home" } }
-            LaunchedEffect(home.accountId, route, home.initialized, guide.completed) {
-                if (guide.completed && home.initialized && home.accountId != null && route in listOf("home", "exams")) { kotlinx.coroutines.delay(600); model.autoRefreshOnce() }
-                else model.stopForegroundSync(invalidate = route != "detail")
+            StartupHomeworkRefresh(home.accountId, home.initialized, guide.completed, model::autoRefreshOnce)
+            LaunchedEffect(route) {
+                if (route !in listOf("home", "exams")) model.stopForegroundSync()
             }
             BackHandler(enabled = route != "home") {
                 if (route == "detail") closeDetail()
@@ -95,11 +88,11 @@ class MainActivity : ComponentActivity() {
                             route == "about" -> AboutScreen { route = "settings" }
                             route == "exams" -> ExamsScreen(exams, home.refreshing || examsRefreshing, examMessage,
                                 model::refresh, {
-                                    model.resetAnswers(); detailHomeworkId = null; detailReturnRoute = "exams"
+                                    model.resetAnswers(); detailReturnRoute = "exams"
                                     allowAi = true; detailUrl = com.homeworkassistant.data.mcp.McpChaoxingParser.EXAM_LIST
                                     detailTitle = "官方考试列表"; route = "detail"
                                 }, { route = "home" }, onOpen = { exam ->
-                                    model.resetAnswers(); detailHomeworkId = null; detailReturnRoute = "exams"; allowAi = true
+                                    model.resetAnswers(); detailReturnRoute = "exams"; allowAi = true
                                     detailUrl = exam.detailUrl?.takeIf { com.homeworkassistant.data.web.TrustedOriginPolicy().allows(it) }
                                         ?: com.homeworkassistant.data.mcp.McpChaoxingParser.EXAM_LIST
                                     detailTitle = exam.title; route = "detail"
@@ -107,16 +100,12 @@ class MainActivity : ComponentActivity() {
                             route == "detail" -> HomeworkDetailScreen(detailUrl, detailTitle, answers,
                                 ::closeDetail, { model.generate(it, true) }, model::fill, model::editAnswer, model::cancelAi,
                                 model.pageImport.collectAsStateWithLifecycle().value, model::importCurrentPage, allowAi, model::cancelSync,
-                                { web -> if (allowAi && detailReturnRoute == "home") {
-                                    model.homeworkIdForUrl(web.url.orEmpty())?.let { detailHomeworkId = it }
-                                    model.captureHomeworkDeadline(web)
-                                    model.requestHomeworkStatusCheck()
-                                } }, examMode = detailReturnRoute == "exams")
+                                examMode = detailReturnRoute == "exams")
                             else -> HomeScreen(home, model::refresh, model::filter, { h ->
-                                model.resetAnswers(); detailReturnRoute = "home"; allowAi = true; detailHomeworkId = h.id; detailUrl = h.detailUrl; detailTitle = h.title; route = "detail"
+                                model.selectCourse(h.course.id); model.resetAnswers(); detailReturnRoute = "home"; allowAi = true; detailUrl = h.detailUrl; detailTitle = h.title; route = "detail"
                             }, { route = "settings" }, { route = "login" }, {
                                 if (home.accountId == null) route = "login" else {
-                                    model.resetAnswers(); detailReturnRoute = "home"; allowAi = true; detailHomeworkId = null; detailUrl = "https://i.chaoxing.com"; detailTitle = "官方页面"; route = "detail"
+                                    model.resetAnswers(); detailReturnRoute = "home"; allowAi = true; detailUrl = "https://i.chaoxing.com"; detailTitle = "官方页面"; route = "detail"
                                 }
                             }, onExams = { route = if (home.accountId == null) "login" else "exams" }, onCancelSync = model::cancelSync,
                                 onRefreshCurrent = model::refreshCurrentCourse, onForceRefresh = model::forceRefresh, onResumeReads = model::resumeOfficialReads)
@@ -132,6 +121,5 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         // Read-only synchronization is foreground-only; leaving the app cancels in-flight requests.
         model.stopForegroundSync()
-        model.stopHomeworkStatusChecks()
     }
 }

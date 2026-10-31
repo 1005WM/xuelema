@@ -7,6 +7,14 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
@@ -27,15 +35,24 @@ import com.homeworkassistant.ui.AnswerUiState
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiAnswerBottomSheet(state: AnswerUiState, onDismiss: () -> Unit, onEdit: (String, String) -> Unit,
-    onFill: () -> Unit, onGenerate: () -> Unit, onCancel: () -> Unit, onCompare: () -> Unit) {
+    onFill: () -> Unit, onGenerate: () -> Unit, onCancel: () -> Unit, onCompare: () -> Unit,
+    listState: LazyListState = rememberLazyListState()) {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
+    val dragging by listState.interactionSource.collectIsDraggedAsState()
+    val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+    LaunchedEffect(dragging) {
+        // Release an earlier text field's bring-into-view requests when the user scrolls the list.
+        if (dragging) focusManager.clearFocus()
+    }
     val filledCount = state.answers.count { state.fillFeedback[it.questionId] in setOf("已回填", "已有相同答案") }
     val firstPending = state.answers.indexOfFirst { state.fillFeedback[it.questionId] !in setOf("已回填", "已有相同答案") }
     fun copy(text: String) { scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("作业答案", text))) } }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).fillMaxHeight(.92f).imePadding()) {
+    ModalBottomSheet(onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetGesturesEnabled = false, dragHandle = null) {
+        Column(Modifier.fillMaxWidth().height(windowHeight * .92f).padding(horizontal = 20.dp).imePadding()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("AI 作答", style = MaterialTheme.typography.headlineSmall)
@@ -48,10 +65,11 @@ fun AiAnswerBottomSheet(state: AnswerUiState, onDismiss: () -> Unit, onEdit: (St
                         "$label：${answer.answer}\n${answer.explanation}"
                     })
                 }) { Text("复制全部") }
+                TextButton(onClick = onDismiss, modifier = Modifier.semantics { contentDescription = "关闭 AI 作答" }) { Text("关闭") }
             }
             if (state.fillFeedback.isNotEmpty()) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("已确认 $filledCount / ${state.answers.size} 题", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (firstPending >= 0) TextButton(onClick = { scope.launch { listState.animateScrollToItem(firstPending + 1) } },
+                if (firstPending >= 0) TextButton(onClick = { scope.launch { focusManager.clearFocus(); listState.animateScrollToItem(firstPending + 1) } },
                     modifier = Modifier.semantics { contentDescription = "查看待处理题目" }) { Text("待处理 ${state.answers.size - filledCount} 题 ↓") }
             }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
@@ -61,7 +79,7 @@ fun AiAnswerBottomSheet(state: AnswerUiState, onDismiss: () -> Unit, onEdit: (St
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            LazyColumn(Modifier.weight(1f), state = listState, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("ai-answer-list"), state = listState, overscrollEffect = null, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
                 item(key = "guidance") {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("提交前请核对 AI 答案。生成时，题目及已启用的图片将发送给设置中的 AI 服务。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

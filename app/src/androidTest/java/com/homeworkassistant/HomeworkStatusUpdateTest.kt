@@ -16,6 +16,8 @@ import com.homeworkassistant.domain.model.*
 import com.homeworkassistant.domain.repository.*
 import com.homeworkassistant.domain.usecase.BuildHomeContentUseCase
 import com.homeworkassistant.ui.AppViewModel
+import com.homeworkassistant.ui.components.StartupHomeworkRefresh
+import androidx.compose.material3.Text
 import com.homeworkassistant.ui.home.*
 import com.homeworkassistant.ui.theme.HomeworkTheme
 import kotlinx.coroutines.flow.first
@@ -98,7 +100,7 @@ class HomeworkStatusUpdateTest {
             assertNull(saved.score)
         } finally { db.close() }
     }
-    @Test fun foregroundWatcherReadsOfficialSubmissionAndUpdatesTotalsAutomatically() {
+    @Test fun startupReadsOnceAndOnlyManualRefreshUpdatesSubmissionAfterNavigation() {
         val db = database()
         val store = ViewModelStore()
         lateinit var model: AppViewModel
@@ -106,15 +108,15 @@ class HomeworkStatusUpdateTest {
         val reads = AtomicInteger()
         try {
             val repo = HomeworkRepositoryImpl(db)
-            runBlocking { repo.publish(seed) }
+            runBlocking { repo.publish(seed.copy(items = listOf(a))) }
             val reader = McpChaoxingReader(McpReadTransport { url ->
                 reads.incrementAndGet()
                 val html = when (url.toHttpUrl().encodedPath) {
                     "/base" -> "<input id=fid value=123>"
                     "/mooc2-ans/visit/courselistdata" -> "<li><a href='https://mooc1.chaoxing.com/visit/stucoursemiddle?courseid=11&amp;clazzid=22&amp;cpi=33'>数学</a><p class=course-name>数学</p></li>"
                     "/visit/stucoursemiddle" -> "<input id=workEnc value=fixture><input id=enc value=fixture>"
-                    "/mooc2/work/list" -> "<span>0/1</span><li onclick='goTask(this)' data='https://mooc1.chaoxing.com/work?workId=71'><p class=work-title>自动完成练习</p><p class=status>${if (submitted.get()) "待批阅" else "未提交"}</p></li>"
-                    else -> error("Unexpected status endpoint")
+                    "/mooc2/work/list" -> "<span>0/1</span><li onclick='goTask(this)' data='https://mooc1.chaoxing.com/work?workId=71'><p class=work-title>自动完成练习</p><p class=status>${if (submitted.get()) "待批阅" else "未提交"}</p><p>截止时间：2026-11-30 23:59</p></li>"
+                    else -> if (url.contains("exam", true)) "<table><tr><td>暂无考试</td></tr></table>" else error("Unexpected endpoint: ${url.toHttpUrl().encodedPath}")
                 }
                 OfficialHtml(url, html)
             })
@@ -149,19 +151,44 @@ class HomeworkStatusUpdateTest {
                     HomeworkSyncCoordinator(reader, repo, exams), ai, WebSessionController())
                 store.put("status-test", model)
             }
-            compose.waitUntil(5_000) { model.home.value.content?.summary?.pendingTotal == 2 }
-            instrumentation.runOnMainSync { model.watchHomeworkStatus(a.id) }
-            compose.waitUntil(5_000) { reads.get() >= 2 }
+            var route by mutableStateOf("home")
+            val startupCalls = AtomicInteger()
+            compose.setContent {
+                val home by model.home.collectAsState()
+                StartupHomeworkRefresh(home.accountId, home.initialized, true) {
+                    startupCalls.incrementAndGet()
+                    model.autoRefreshOnce()
+                }
+                Text(route)
+            }
+            compose.waitUntil(10_000) {
+                model.home.value.snapshot?.fetchedAt?.isAfter(Instant.EPOCH) == true && !model.home.value.refreshing
+            }
+            instrumentation.runOnMainSync { model.stopForegroundSync() }
+            android.os.SystemClock.sleep(2_000) // Exceeds the former 1.5-second debounce.
+            val afterStartup = reads.get()
+            assertTrue(afterStartup > 0)
+            assertEquals(1, startupCalls.get())
             submitted.set(true)
-            instrumentation.runOnMainSync { model.requestHomeworkStatusCheck() }
-            compose.waitUntil(10_000) { model.home.value.content?.summary?.completedTotal == 1 }
-            assertEquals(1, model.home.value.content!!.summary.pendingTotal)
-            assertEquals(HomeworkStatus.SUBMITTED, runBlocking { repo.observe("one").first()!!.items.first { it.id == a.id }.status })
-            instrumentation.runOnMainSync { model.stopHomeworkStatusChecks() }
-            val afterStop = reads.get()
-            instrumentation.runOnMainSync { model.requestHomeworkStatusCheck() }
-            android.os.SystemClock.sleep(150)
-            assertEquals(afterStop, reads.get())
+            reader.wallTime = { Instant.now().plusSeconds(3_600) } // Cached course lists would now be stale.
+            repeat(3) {
+                compose.runOnIdle { route = "detail"; model.selectCourse(a.course.id) }
+                compose.runOnIdle { route = "home" }
+            }
+            instrumentation.runOnMainSync { model.autoRefreshOnce() } // Activity recreation must not retry either.
+            android.os.SystemClock.sleep(500)
+            assertEquals(1, startupCalls.get())
+            assertEquals(afterStartup, reads.get())
+            assertEquals(HomeworkStatus.NOT_SUBMITTED, runBlocking {
+                repo.observe("one").first()!!.items.first { it.id == a.id }.status
+            })
+
+            instrumentation.runOnMainSync { model.forceRefresh() }
+            compose.waitUntil(10_000) { model.home.value.content?.summary?.completedTotal == 1 && !model.home.value.refreshing }
+            assertTrue(reads.get() > afterStartup)
+            assertEquals(HomeworkStatus.SUBMITTED, runBlocking {
+                repo.observe("one").first()!!.items.first { it.id == a.id }.status
+            })
         } finally {
             InstrumentationRegistry.getInstrumentation().runOnMainSync { store.clear() }
             db.close()
