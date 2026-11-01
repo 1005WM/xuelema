@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+// Set by CI only when the existing app's private signing key is configured.
+val existingSigningStore = providers.environmentVariable("ANDROID_SIGNING_STORE_FILE").orNull
 android {
     namespace = "com.homeworkassistant"
     compileSdk = 37
@@ -20,8 +22,22 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    if (!existingSigningStore.isNullOrBlank()) {
+        signingConfigs {
+            create("existing") {
+                storeFile = file(existingSigningStore)
+                storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").get()
+            }
+        }
+    }
     buildTypes {
+        debug {
+            if (!existingSigningStore.isNullOrBlank()) signingConfig = signingConfigs.getByName("existing")
+        }
         release {
+            if (!existingSigningStore.isNullOrBlank()) signingConfig = signingConfigs.getByName("existing")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

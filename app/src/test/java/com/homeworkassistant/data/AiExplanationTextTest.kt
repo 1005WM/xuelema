@@ -42,7 +42,7 @@ class AiExplanationTextTest {
         val math = listOf(
             """公式 \nu、\nabla f、\neq、\notin 与 \nRightarrow。""",
             """$\begin{matrix}a\\n & b\end{matrix}$""",
-            """${',
+            """${'$'}${'$'}a\\n & b${'$'}${'$'}""",
             """\(\nu + \nabla f\\n\)""",
             """\[\begin{matrix}a\\n & b\end{matrix}\]""",
             """\begin{align}a\\n & b\end{align}"""
