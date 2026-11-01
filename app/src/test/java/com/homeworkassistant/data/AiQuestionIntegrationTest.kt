@@ -100,6 +100,24 @@ class AiQuestionIntegrationTest {
         assertEquals(explanation, decoded.explanation)
     }
 
+
+    @Test fun streamedExplanationsShowHumanProgressAndDecodedLineBreaks() = runBlocking {
+        val fill = question.copy(type = QuestionType.FILL, stem = "x + 1 = 3，x = ____。", options = emptyList(), optionKeys = emptyList())
+        val expected = "1. 列式。\n2. 计算并核对。\n".repeat(12).trimEnd()
+        val escaped = expected.replace("\n", "\\n")
+        val repo = AiRepositoryImpl(keys, client {
+            200 to sse(gson.toJson(mapOf("answers" to listOf(
+                mapOf("id" to fill.id, "answer" to "2", "explanation" to escaped)))))
+        })
+        val events = repo.generate(listOf(fill), settings).toList()
+        val progress = events.filterIsInstance<AiEvent.Progress>()
+        assertTrue(progress.isNotEmpty())
+        assertTrue(progress.all { !it.text.contains("\\n") && !it.text.contains("\"answers\"") })
+        val answer = events.filterIsInstance<AiEvent.Batch>().single().answers.single()
+        assertEquals("2", answer.answer)
+        assertEquals(expected, answer.explanation)
+    }
+
     @Test fun imageQuestionsRequireExplicitOptInAndNeverDegradeToTextOnly() = runBlocking {
         var requests = 0
         val repo = AiRepositoryImpl(keys, client { requests++; error("Must not send a partial question") })

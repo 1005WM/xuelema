@@ -122,7 +122,7 @@ class AiRepositoryImpl internal constructor(private val secrets: SecretStore, pr
                                 if (text.length > 250000) throw IOException("AI 输出过长")
                                 if (text.length - lastPreview > 180) {
                                     lastPreview = text.length
-                                    emit(AiEvent.Progress("第 ${index + 1}/${batches.size} 批输出中：\n${text.takeLast(900)}"))
+                                    emit(AiEvent.Progress("正在生成第 ${index + 1}/${batches.size} 批答案与解析，请稍候…"))
                                 }
                                 val finish = choice?.get("finish_reason")?.takeUnless { v -> v.isJsonNull }?.asString
                                 if (finish != null) { finished = true; truncated = finish == "length" }
