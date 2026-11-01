@@ -2,7 +2,9 @@
 
 Android 客户端原型，采用 Kotlin、Jetpack Compose / Material 3、Hilt、Room、DataStore、OkHttp / Retrofit 和 Coroutines / Flow。最低 Android 8.0（API 26），编译和目标 SDK 为 Android 17（API 37）。
 
-当前版本 **0.3.9**（versionCode 24）。覆盖安装 [XieLeMa-0.3.9-debug.apk](dist/XieLeMa-0.3.9-debug.apk)。补齐截止日期的官方作业内嵌页读取、拆分标签时间解析，并在打开作业后保存网页实际显示的截止信息，详见 [截止日期补充读取](docs/deadline-documents-fix.md)。首页红色的详细同步结果段落保持隐藏，原有刷新、缓存和验证恢复入口保留。首页先显示 Room 缓存，课程目录默认复用 30 分钟，每门课程的成功作业列表默认复用 5 分钟。右上角“⋮”提供“刷新过期课程”“刷新当前课程”“强制全量刷新”；提交核对始终可以绕过所属课程的数据有效期，并与正在进行的课程读取共用结果。详情见 [按课程缓存与增量更新](docs/incremental-course-cache.md)。保留 [截止日期全角冒号修复](docs/deadline-fullwidth-fix.md)、[考试入口与回填速度](docs/deadline-exam-fill-speed.md)、[首次使用引导](docs/first-launch-guide.md) 和现有 UI。
+当前版本 **0.3.12**（versionCode 27）。`main` 已包含 [多空题逐空回填修复](docs/multi-blank-fill-fix.md)、[启动刷新与 AI 答案滚动修复](docs/startup-refresh-and-ai-scroll.md)、[AI 解题步骤与换行显示修复](docs/ai-explanation-newlines.md)，以及 [已有签名配置与证书比对](docs/existing-signature.md)。安装包和验证报告由 [Android verification 工作流](.github/workflows/android-verification.yml) 生成；本次合并详情见 [合并核验记录](docs/main-merge-0312.md)。
+
+首页先显示 Room 缓存，每个账号每次应用会话自动尝试读取一次，后续通过手动刷新更新。课程目录默认复用 30 分钟，每门课程的成功作业列表默认复用 5 分钟；右上角“⋮”提供“刷新过期课程”“刷新当前课程”“强制全量刷新”。首页红色的详细同步结果段落保持隐藏。保留官方作业内嵌页与拆分标签截止信息解析、考试入口、回填速度设置、首次使用引导和现有 UI。历史缓存与截止日期实现记录见 [按课程缓存与增量更新](docs/incremental-course-cache.md) 和 [截止日期补充读取](docs/deadline-documents-fix.md)，当前读取触发规则以 [启动刷新说明](docs/startup-refresh-and-ai-scroll.md) 为准。
 
 作业读取沿用前版课程范围，扫描结果浮层仍在 3 秒后关闭，见 [同步提示调整](docs/sync-popup-fixes.md) 与 [课程范围和已知限制](docs/course-scope-fixes.md)。考试仅排除明确关联到结课或未开放课程的记录；关联不明的考试保留并标注待确认，不根据标题猜测课程。真实学校页面仍需验证。
 
@@ -10,7 +12,7 @@ Android 客户端原型，采用 Kotlin、Jetpack Compose / Material 3、Hilt、
 
 目录按账号缓存课程标识、生命周期和 cpi 等入口元数据；每门作业的成功时间及失败状态与 Room 作业数据关联，失败不推进成功时间、不清空旧作业。普通刷新只读过期或需要核对的课程；有效目录中的结课课程继续排除，已确认移出完整目录的课程也会从首页移除。时间为产品默认值，不是平台安全阈值。429、人机验证和明确访问限制会暂停请求；遵循 Retry-After（含 HTTP 日期），强制刷新和重启不能绕过尚未结束的等待。
 
-作业详情在前台打开时，当前课程状态核对完成后间隔 5 秒自动重查；网页加载完成会提前触发核对，覆盖没有整页跳转的提交。返回首页时立即核对，最多再补查两次。同账号、同课程的在途核对共用请求，成功结果有 1.5 秒合并窗口。只回填或保存草稿不会被当成已提交。有效签名直接复用；缓存缺失或签名失效时只恢复目标课程的 enc/stuenc，不退回全量扫描。退出前台取消请求，返回前台恢复待核对任务。
+当前版本不再因详情页轮询、网页加载完成、返回首页或重新进入前台而自动读取。作业提交后，请手动刷新以更新总数、分类和列表；仅回填或保存草稿仍不会被当作已提交。有效签名直接复用；缓存缺失或签名失效时只恢复目标课程的 enc/stuenc，不退回全量扫描。离开前台取消在途同步，手动刷新、验证后重试和官方页面同步入口保持可用。
 
 这是一份 **Android 原生移植**：直接复用官方网页登录的 Cookie，由手机执行同源只读 HTTPS 请求，不启动 Python MCP Server，不依赖电脑或将 Cookie 上传到中转。上游本身是 Python stdio MCP 服务，并未提供可直接填入 Android 的公共 HTTPS MCP 地址。
 
