@@ -27,7 +27,9 @@ internal object AiAnswerCodec {
                     else -> items.singleOrNull() ?: throw IOException("AI 单题答案数量不正确")
                 }
             } else if (value.isJsonPrimitive && value.asJsonPrimitive.isString) value.asString else throw IOException("AI 答案类型无效")
-            val explanation = string("explanation")?.takeIf { it.isNotBlank() } ?: string("reason") ?: ""
+            val rawExplanation = string("explanation")?.takeIf { it.isNotBlank() } ?: string("reason") ?: ""
+            require(rawExplanation.length <= 20000) { "AI 答案格式不完整或无法确定答案，请核对原文" }
+            val explanation = AiExplanationText.normalize(rawExplanation)
             if (question.type == QuestionType.FILL && explanation.isBlank())
                 throw IOException("第 ${question.sourceNumber} 题填空题缺少解题步骤，请点击“补全答案”重试")
             Answer(id, answer, explanation)

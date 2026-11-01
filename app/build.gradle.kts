@@ -11,8 +11,8 @@ android {
         applicationId = "com.homeworkassistant"
         minSdk = 26
         targetSdk = 37
-        versionCode = 26
-        versionName = "0.3.11"
+        versionCode = 27
+        versionName = "0.3.12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }

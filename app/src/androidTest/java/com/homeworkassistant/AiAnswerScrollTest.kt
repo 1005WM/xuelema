@@ -9,6 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.homeworkassistant.domain.model.Answer
+import com.homeworkassistant.data.ai.AiAnswerCodec
+import com.google.gson.Gson
 import com.homeworkassistant.domain.model.Question
 import com.homeworkassistant.domain.model.QuestionPage
 import com.homeworkassistant.domain.model.QuestionType
@@ -83,12 +85,16 @@ class AiAnswerScrollTest {
     @Test fun fillStepsAreShownSeparatelyFromTheFinalAnswerField() {
         val steps = "1. 根据 x + 1 = 3 列式。\n2. 两边减 1，得到 x = 2。\n3. 将 2 代回核对。"
         val question = Question("q1", 1, QuestionType.FILL, "已知 x + 1 = 3，x = ____。", emptyList())
+        val escapedSteps = steps.replace("\n", "\\n")
+        val answer = AiAnswerCodec.decode(Gson().toJson(mapOf("answers" to listOf(
+            mapOf("id" to question.id, "answer" to "2", "explanation" to escapedSteps)))), listOf(question)).single()
         compose.setContent { HomeworkTheme { Surface(Modifier.fillMaxSize()) {
             AiAnswerBottomSheet(AnswerUiState(page = QuestionPage("https://mooc1.chaoxing.com/work", "fixture", listOf(question)),
-                answers = listOf(Answer("q1", "2", steps))), {}, { _, _ -> }, {}, {}, {}, {})
+                answers = listOf(answer)), {}, { _, _ -> }, {}, {}, {}, {})
         } } }
         compose.onNodeWithText("解题步骤").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(steps).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(escapedSteps).assertDoesNotExist()
         val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode()
         assertEquals("2", field.config[SemanticsProperties.EditableText].text)
     }
