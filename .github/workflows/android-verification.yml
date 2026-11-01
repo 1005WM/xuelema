@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   javascript:
     runs-on: ubuntu-latest
@@ -82,11 +83,33 @@ jobs:
           script: gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.homeworkassistant.HomeworkStatusUpdateTest,com.homeworkassistant.AiAnswerScrollTest
       - name: Name APK
         run: cp app/build/outputs/apk/debug/app-debug.apk XieLeMa-0.3.12-debug.apk
+      - name: Download the 0.3.11 update baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: XieLeMa-0.3.11-debug
+          run-id: 41218821808
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: previous-apk
       - name: Verify APK signature and record certificate
         shell: bash
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs XieLeMa-0.3.12-debug.apk > signing-certificate.txt
           printf '\nExisting signing key configured: %s\n' "$ANDROID_SIGNING_CONFIGURED" >> signing-certificate.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs previous-apk/XieLeMa-0.3.11-debug.apk > previous-certificate.txt
+          previous_digest=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' previous-certificate.txt)
+          current_digest=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signing-certificate.txt)
+          if [ -z "$previous_digest" ] || [ -z "$current_digest" ]; then
+            echo "::error::Unable to read APK signing certificate fingerprints."
+            exit 1
+          fi
+          if [ "$previous_digest" = "$current_digest" ]; then
+            printf '\nCan update the previously supplied 0.3.11 APK: true\n' >> signing-certificate.txt
+            echo "Same signing certificate as the supplied 0.3.11 APK."
+          else
+            printf '\nCan update the previously supplied 0.3.11 APK: false\n' >> signing-certificate.txt
+            echo "::notice::APK certificate differs from the supplied 0.3.11. The original private key is required for an in-place update."
+          fi
+          printf '\n0.3.11 certificate SHA-256: %s\n' "$previous_digest" >> signing-certificate.txt
       - uses: actions/upload-artifact@v4
         with:
           name: XieLeMa-0.3.12-debug
