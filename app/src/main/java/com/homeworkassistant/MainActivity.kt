@@ -1,11 +1,15 @@
 package com.homeworkassistant
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -31,6 +35,11 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val model: AppViewModel by viewModels()
+    override fun onResume() {
+        super.onResume()
+        model.refreshDeadlineAlarm()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -46,6 +55,19 @@ class MainActivity : ComponentActivity() {
             val syncNotice by model.syncNotice.collectAsStateWithLifecycle()
             val aiConnection by model.aiConnection.collectAsStateWithLifecycle()
             val login by model.login.collectAsStateWithLifecycle()
+            val hasDatedHomework = home.snapshot?.items?.any { it.status.isPending && it.dueAt != null } == true
+            var notificationPermissionRequested by rememberSaveable { mutableStateOf(false) }
+            val requestNotificationPermission = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()) { granted ->
+                if (granted) model.refreshDeadlineAlarm()
+            }
+            LaunchedEffect(hasDatedHomework, guide.completed) {
+                if (hasDatedHomework && guide.completed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    !model.canPostDeadlineReminder() && !notificationPermissionRequested) {
+                    notificationPermissionRequested = true
+                    requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
             var route by rememberSaveable { mutableStateOf("home") }
             var detailUrl by rememberSaveable { mutableStateOf("https://i.chaoxing.com") }
             var detailTitle by rememberSaveable { mutableStateOf("官方页面") }

@@ -66,10 +66,10 @@ fun SettingsScreen(initial: AppSettings, readKey: suspend () -> String, onSave: 
                     Switch(value.compact, { value = value.copy(compact = it); onAppearanceChange(value) })
                 }
                 Column {
-                    Text("截止高亮：提前 ${value.reminderHours} 小时", style = MaterialTheme.typography.bodyMedium)
+                    Text("截止高亮与提醒：提前 ${value.reminderHours} 小时", style = MaterialTheme.typography.bodyMedium)
                     Slider(value.reminderHours.toFloat(), { value = value.copy(reminderHours = it.toInt()) }, valueRange = 1f..168f, steps = 166,
                         onValueChangeFinished = { onAppearanceChange(value) })
-                    Text("仅列表高亮，暂不发送系统通知。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("允许通知后，已同步的作业可在后台提醒。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             StudyPanel {

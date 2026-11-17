@@ -1,10 +1,13 @@
 package com.homeworkassistant.ui
 
 import android.content.Context
+import android.util.Log
 import android.webkit.WebView
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.homeworkassistant.data.notification.DeadlineAlarm
+import com.homeworkassistant.data.notification.DeadlineNotifier
 import com.homeworkassistant.data.security.SecretStore
 import com.homeworkassistant.data.ai.AiConnection
 import com.homeworkassistant.data.session.CookieCoordinator
@@ -53,6 +56,8 @@ class AppViewModel @Inject constructor(
     private val sync: HomeworkSyncCoordinator,
     private val ai: AiRepository,
     val webHost: WebSessionController,
+    private val notifier: DeadlineNotifier = DeadlineNotifier(context),
+    private val deadlineAlarm: DeadlineAlarm = DeadlineAlarm(context, settingsRepository, homework, notifier),
 ) : ViewModel() {
     private val filter = MutableStateFlow(HomeFilter())
     private val guideSave = MutableStateFlow(GuideUiState())
@@ -83,6 +88,21 @@ class AppViewModel @Inject constructor(
             configured.first, f, r.busy, r.error, r.needsLogin, !r.fresh, r.progress, r.detailsBusy, configured.second,
             pair.third, f.courseId ?: sync.preferredCourseId(pair.first))
     }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState())
+    init {
+        viewModelScope.launch {
+            home.filter { it.initialized && !it.refreshing }
+                .map { Triple(it.accountId, it.snapshot, it.settings.reminderHours) }
+                .distinctUntilChanged()
+                .collect { checkDeadlines() }
+        }
+    }
+    fun canPostDeadlineReminder(): Boolean = notifier.canPost()
+    fun refreshDeadlineAlarm() { viewModelScope.launch { checkDeadlines() } }
+    private suspend fun checkDeadlines() {
+        try { deadlineAlarm.check() }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { Log.w("DeadlineAlarm", "Could not check cached deadlines", e) }
+    }
     private val _answers = MutableStateFlow(AnswerUiState())
     val answers = _answers.asStateFlow()
     private val _notice = MutableStateFlow<String?>(null)
