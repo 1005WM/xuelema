@@ -1,0 +1,37 @@
+name: Publish v0.3.12
+on:
+  push:
+    branches: [codex/publish-v0.3.12]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: 1005WM/xuelema
+    steps:
+      - name: Download, verify and publish the APK
+        shell: bash
+        run: |
+          gh run download 44029250322 -n XieLeMa-0.3.12-debug
+          echo '1dc3f3bb82fec986101ba7f37c5f4ffc2dd50f0c469c239fa80abcfdb7678318  XieLeMa-0.3.12-debug.apk' | sha256sum -c -
+          cat > release-notes.md <<'NOTES'
+          ## 更新内容
+          
+          - 新增作业截止通知。已同步的未完成作业进入设定的提前提醒范围后，应用可在后台根据本地缓存发送通知。
+          - 修复多空题逐空生成和回填。
+          - 调整首页启动刷新。每个账号每次应用会话自动尝试同步一次，提交后的状态可通过手动刷新更新。
+          - 修复 AI 答案滚动、解题步骤和换行显示。
+          
+          ## 安装
+          
+          下载 `XieLeMa-0.3.12-debug.apk`，支持 Android 8.0 及以上。Android 13 及以上需要授予通知权限才能收到作业截止提醒。
+          
+          这是调试签名版本，无法覆盖此前签名不同的 0.3.11 安装包。卸载旧版可能清除本地数据。
+          
+          [构建与测试记录](https://github.com/1005WM/xuelema/actions/runs/44029250322)
+          NOTES
+          gh release create v0.3.12 XieLeMa-0.3.12-debug.apk --target ccd2ab1757b1b169e9813e6d2b9a937d74fd2b0f --title '写了吗？v0.3.12' --notes-file release-notes.md
